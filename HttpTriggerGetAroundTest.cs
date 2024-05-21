@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
+using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
@@ -14,6 +15,10 @@ namespace GetAroundBredvid.Function
 
         private static readonly string SecretToken = Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN");
         private readonly ILogger<HttpTriggerGetAroundTest> _logger;
+        private static readonly HttpClient client = new HttpClient
+            {
+                BaseAddress = new Uri("https://api.getaround.com/")
+            };
 
         public HttpTriggerGetAroundTest(ILogger<HttpTriggerGetAroundTest> logger)
         {
@@ -28,13 +33,19 @@ namespace GetAroundBredvid.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             string signature = req.Headers["X-Drivy-Signature"];
 
-            foreach (var header in req.Headers)
-            {
-                _logger.LogInformation($"Header: {header.Key} = {string.Join(",", header.Value)}");
-            }
-
             _logger.LogInformation("x-Drivy-Signature: " + signature);
             _logger.LogInformation("requestBody: " + requestBody);
+
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer bb8818bb0fb7aa8b581a005bdfe684fc");
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+            // client.DefaultRequestHeaders.Add("X-Car-by-Name", "true");
+
+            HttpResponseMessage response = client.GetAsync("cars/1351582").Result;
+
+             string responseBody = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Response: " + responseBody);
 
             // if (!VerifySignature(requestBody, signature))
             // {
@@ -46,29 +57,36 @@ namespace GetAroundBredvid.Function
 
             // _logger.LogInformation($"Payload received: {payload.ToString()}");
 
-            return new OkObjectResult("Request done!:)");
+
+
+            return new OkObjectResult("Request done!:)" + responseBody);
         }
 
-        private static bool VerifySignature(string payloadBody, string signature)
-        {
-            using (var hmac = new HMACSHA1(Encoding.UTF8.GetBytes(SecretToken)))
-            {
-                var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(signature));
-                var hashString = "sha1=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
 
-                return SlowEquals(hashString, signature);
-            }
-        }
 
-        private static bool SlowEquals(string a, string b)
-        {
-            uint diff = (uint)a.Length ^ (uint)b.Length;
-            for (int i = 0; i < a.Length && i < b.Length; i++)
-            {
-                diff |= (uint)(a[i] ^ b[i]);
-            }
-            return diff == 0;
-        }
+
+
+
+        // private static bool VerifySignature(string payloadBody, string signature)
+        // {
+        //     using (var hmac = new HMACSHA1(Encoding.UTF8.GetBytes(SecretToken)))
+        //     {
+        //         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(signature));
+        //         var hashString = "sha1=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
+
+        //         return SlowEquals(hashString, signature);
+        //     }
+        // }
+
+        // private static bool SlowEquals(string a, string b)
+        // {
+        //     uint diff = (uint)a.Length ^ (uint)b.Length;
+        //     for (int i = 0; i < a.Length && i < b.Length; i++)
+        //     {
+        //         diff |= (uint)(a[i] ^ b[i]);
+        //     }
+        //     return diff == 0;
+        // }
 
     }
 }
