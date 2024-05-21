@@ -46,8 +46,7 @@ namespace GetAroundBredvid.Function
 
             // _logger.LogInformation($"Payload received: {payload.ToString()}");
 
-            // return new OkObjectResult("Sent in signature is: " + signature);
-            return new OkResult();
+            return new OkObjectResult("Request done!:)");
         }
 
         private static bool VerifySignature(string payloadBody, string signature)
