@@ -31,21 +31,22 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+            // COde that sends a message to the client who rented a car
+            // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            // client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            // client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
 
-            var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+            // var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
 
-            var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            // var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-            HttpResponseMessage response = await client.PostAsync("owner/v1/rentals/8305555/messages.json", content);
+            // HttpResponseMessage response = await client.PostAsync("owner/v1/rentals/8305555/messages.json", content);
 
-             string responseBody = await response.Content.ReadAsStringAsync();
+            //  string responseBody = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Response: " + responseBody);
+            // _logger.LogInformation("Response: " + responseBody);
 
-            return new OkObjectResult("Request done!:)" + responseBody);
+            return new OkObjectResult("Request done!:)");
         }
 
         // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
