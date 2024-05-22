@@ -31,41 +31,38 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            // string signature = req.Headers["X-Drivy-Signature"];
-
-            // _logger.LogInformation("x-Drivy-Signature: " + signature);
-            // _logger.LogInformation("requestBody: " + requestBody);
-
-            // HttpClient client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-            // client.DefaultRequestHeaders.Add("Authorization", "Bearer bb8818bb0fb7aa8b581a005bdfe684fc");
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
-            // client.DefaultRequestHeaders.Add("X-Car-by-Name", "true");
 
-            HttpResponseMessage response = client.GetAsync("owner/v1/rentals/8338525.json").Result;
+            var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+
+            var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+
+            HttpResponseMessage response = await client.PostAsync("owner/v1/rentals/8305555/messages.json", content);
 
              string responseBody = await response.Content.ReadAsStringAsync();
 
             _logger.LogInformation("Response: " + responseBody);
 
-            // if (!VerifySignature(requestBody, signature))
-            // {
-            //     _logger.LogWarning("Signature mismatch. Possible tampering detected.");
-            //     return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-            // }
-
-            // var payload = JObject.Parse(requestBody);
-
-            // _logger.LogInformation($"Payload received: {payload.ToString()}");
-
-
-
             return new OkObjectResult("Request done!:)" + responseBody);
         }
 
+        // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+        // string signature = req.Headers["X-Drivy-Signature"];
 
+        // _logger.LogInformation("x-Drivy-Signature: " + signature);
+        // _logger.LogInformation("requestBody: " + requestBody);
+
+        // if (!VerifySignature(requestBody, signature))
+        // {
+        //     _logger.LogWarning("Signature mismatch. Possible tampering detected.");
+        //     return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+        // }
+
+        // var payload = JObject.Parse(requestBody);
+
+        // _logger.LogInformation($"Payload received: {payload.ToString()}");
 
 
 
