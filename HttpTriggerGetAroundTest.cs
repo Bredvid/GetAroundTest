@@ -18,7 +18,7 @@ namespace GetAroundBredvid.Function
         private readonly ILogger<HttpTriggerGetAroundTest> _logger;
         private static readonly HttpClient client = new HttpClient
             {
-                BaseAddress = new Uri("https://api.getaround.com/")
+                BaseAddress = new Uri("https://api-eu.getaround.com/")
             };
 
         public HttpTriggerGetAroundTest(ILogger<HttpTriggerGetAroundTest> logger)
@@ -38,13 +38,13 @@ namespace GetAroundBredvid.Function
             // _logger.LogInformation("requestBody: " + requestBody);
 
             // HttpClient client = new HttpClient();
-client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
             // client.DefaultRequestHeaders.Add("Authorization", "Bearer bb8818bb0fb7aa8b581a005bdfe684fc");
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
             // client.DefaultRequestHeaders.Add("X-Car-by-Name", "true");
 
-            HttpResponseMessage response = client.GetAsync("cars/1351582").Result;
+            HttpResponseMessage response = client.GetAsync("owner/v1/rentals/8338525.json").Result;
 
              string responseBody = await response.Content.ReadAsStringAsync();
 
