@@ -7,14 +7,15 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json;
 
 namespace GetAroundBredvid.Function
 {
     public class HttpTriggerGetAroundTest
     {
 
-        private static readonly string SecretToken = Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN");
-        private static readonly string BearerToken = "bb8818bb0fb7aa8b581a005bdfe684fc";
+        private static readonly string SecretToken = "9f1ea4ed0ba4fcf9f6f0196439cd75e6"; //Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN")
+        private static readonly string BearerToken = "bb8818bb0fb7aa8b581a005bdfe684fc"; //Environment.GetEnvironmentVariable("BEARER_TOKEN")
         private readonly ILogger<HttpTriggerGetAroundTest> _logger;
         private static readonly HttpClient client = new HttpClient
             {
@@ -31,63 +32,77 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            // COde that sends a message to the client who rented a car
-            // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-            // client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            // client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
-            // var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+            if (VerifySignature(req, requestBody) == false){
+                return new StatusCodeResult(500);
+            }
 
-            // var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
 
-            // HttpResponseMessage response = await client.PostAsync("owner/v1/rentals/8305555/messages.json", content);
+            string type = data?.type;
 
-            //  string responseBody = await response.Content.ReadAsStringAsync();
+            string rental_id = data?.data?.rental_id;
 
-            // _logger.LogInformation("Response: " + responseBody);
+            if(type == "rental.booked" && rental_id != null){
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
 
-            return new OkObjectResult("Request done!:)");
+                var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+
+                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", content);
+
+                 string responseBody = await response.Content.ReadAsStringAsync();
+
+                _logger.LogInformation("Response: " + responseBody);
+
+                return new OkObjectResult("Response: " + responseBody);
+            }
+
+            return new OkObjectResult("Request not type rental.booked");
+        }
+        public static bool VerifySignature(HttpRequest req, string payloadBody)
+        {   
+            if (string.IsNullOrEmpty(SecretToken))
+            {
+                return false; // Internal Server Error if SECRET_TOKEN is not set
+            }
+
+            using (var hmac = new HMACSHA1(Encoding.UTF8.GetBytes(SecretToken)))
+            {
+                var payloadBytes = Encoding.UTF8.GetBytes(payloadBody);
+                var computedSignatureBytes = hmac.ComputeHash(payloadBytes);
+                var computedSignature = "sha1=" + BitConverter.ToString(computedSignatureBytes).Replace("-", "").ToLower();
+
+                req.Headers.TryGetValue("X-Drivy-Signature", out var expectedSignature);
+
+                if (string.IsNullOrEmpty(expectedSignature))
+                {
+                    return false;
+                }
+
+                if (SecureCompare(computedSignature, expectedSignature))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
         }
 
-        // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-        // string signature = req.Headers["X-Drivy-Signature"];
-
-        // _logger.LogInformation("x-Drivy-Signature: " + signature);
-        // _logger.LogInformation("requestBody: " + requestBody);
-
-        // if (!VerifySignature(requestBody, signature))
-        // {
-        //     _logger.LogWarning("Signature mismatch. Possible tampering detected.");
-        //     return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-        // }
-
-        // var payload = JObject.Parse(requestBody);
-
-        // _logger.LogInformation($"Payload received: {payload.ToString()}");
-
-
-
-
-        // private static bool VerifySignature(string payloadBody, string signature)
-        // {
-        //     using (var hmac = new HMACSHA1(Encoding.UTF8.GetBytes(SecretToken)))
-        //     {
-        //         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(signature));
-        //         var hashString = "sha1=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
-
-        //         return SlowEquals(hashString, signature);
-        //     }
-        // }
-
-        // private static bool SlowEquals(string a, string b)
-        // {
-        //     uint diff = (uint)a.Length ^ (uint)b.Length;
-        //     for (int i = 0; i < a.Length && i < b.Length; i++)
-        //     {
-        //         diff |= (uint)(a[i] ^ b[i]);
-        //     }
-        //     return diff == 0;
-        // }
-
+        private static bool SecureCompare(string a, string b)
+        {
+            uint diff = (uint)a.Length ^ (uint)b.Length;
+            for (int i = 0; i < a.Length && i < b.Length; i++)
+            {
+                diff |= (uint)a[i] ^ (uint)b[i];
+            }
+            return diff == 0;
+        }
     }
 }
