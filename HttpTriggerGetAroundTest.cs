@@ -14,6 +14,7 @@ namespace GetAroundBredvid.Function
     {
 
         private static readonly string SecretToken = Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN");
+        private static readonly string BearerToken = "bb8818bb0fb7aa8b581a005bdfe684fc";
         private readonly ILogger<HttpTriggerGetAroundTest> _logger;
         private static readonly HttpClient client = new HttpClient
             {
@@ -30,13 +31,15 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            string signature = req.Headers["X-Drivy-Signature"];
+            // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            // string signature = req.Headers["X-Drivy-Signature"];
 
-            _logger.LogInformation("x-Drivy-Signature: " + signature);
-            _logger.LogInformation("requestBody: " + requestBody);
+            // _logger.LogInformation("x-Drivy-Signature: " + signature);
+            // _logger.LogInformation("requestBody: " + requestBody);
 
-            client.DefaultRequestHeaders.Add("Authorization", "Bearer bb8818bb0fb7aa8b581a005bdfe684fc");
+            // HttpClient client = new HttpClient();
+client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            // client.DefaultRequestHeaders.Add("Authorization", "Bearer bb8818bb0fb7aa8b581a005bdfe684fc");
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
             // client.DefaultRequestHeaders.Add("X-Car-by-Name", "true");
