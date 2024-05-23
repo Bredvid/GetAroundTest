@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json;
 
 namespace GetAroundBredvid.Function
 {
@@ -31,7 +32,39 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            // COde that sends a message to the client who rented a car
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
+
+            string type = data?.type;
+
+            string rental_id = data?.data?.rental_id;
+
+            if(type == "rental.booked" && rental_id != null){
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+
+                var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+
+                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", content);
+
+                 string responseBody = await response.Content.ReadAsStringAsync();
+
+                _logger.LogInformation("Response: " + responseBody);
+
+                return new OkObjectResult("Response: " + responseBody);
+            }
+
+            return new OkObjectResult("Request not type rental.booked");
+        }
+
+
+        // string signature = req.Headers["X-Drivy-Signature"];
+////////////////////////////////////////////////////////////////////////////////
+            // READ: Code that sends a message to the client who rented a car
             // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
             // client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             // client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
@@ -45,12 +78,8 @@ namespace GetAroundBredvid.Function
             //  string responseBody = await response.Content.ReadAsStringAsync();
 
             // _logger.LogInformation("Response: " + responseBody);
-
-            return new OkObjectResult("Request done!:)");
-        }
-
-        // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-        // string signature = req.Headers["X-Drivy-Signature"];
+////////////////////////////////////////////////////////////////////////////////
+        
 
         // _logger.LogInformation("x-Drivy-Signature: " + signature);
         // _logger.LogInformation("requestBody: " + requestBody);
