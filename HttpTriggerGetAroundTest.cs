@@ -32,31 +32,31 @@ namespace GetAroundBredvid.Function
         {
             _logger.LogInformation("Function initialized.");
 
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
+            // dynamic data = JsonConvert.DeserializeObject(requestBody);
 
-            string type = data?.type;
+            // string type = data?.type;
 
-            string rental_id = data?.data?.rental_id;
+            // string rental_id = data?.data?.rental_id;
 
-            if(type == "rental.booked" && rental_id != null){
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+            // if(type == "rental.booked" && rental_id != null){
+            //     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            //     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            //     client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
 
-                var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+            //     var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
 
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            //     var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-                HttpResponseMessage response = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", content);
+            //     HttpResponseMessage response = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", content);
 
-                 string responseBody = await response.Content.ReadAsStringAsync();
+            //      string responseBody = await response.Content.ReadAsStringAsync();
 
-                _logger.LogInformation("Response: " + responseBody);
+            //     _logger.LogInformation("Response: " + responseBody);
 
-                return new OkObjectResult("Response: " + responseBody);
-            }
+            //     return new OkObjectResult("Response: " + responseBody);
+            // }
 
             return new OkObjectResult("Request not type rental.booked");
         }
