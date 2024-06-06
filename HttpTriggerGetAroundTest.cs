@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace GetAroundBredvid.Function
 {
@@ -27,59 +28,63 @@ namespace GetAroundBredvid.Function
             _logger = logger;
         }
 
+        public class Message{
+            public int id { get; set; }
+        }
+
         [Function("HttpTriggerGetAroundTest")]
         public async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Anonymous, "post",  Route = null)] HttpRequest req)
         {
             _logger.LogInformation("Function initialized.");
 
-            // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
-            // dynamic data = JsonConvert.DeserializeObject(requestBody);
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
 
-            // string type = data?.type;
+            string type = data?.type;
 
-            // string rental_id = data?.data?.rental_id;
+            string rental_id = data?.data?.rental_id;
 
-            // if(type == "rental.booked" && rental_id != null){
-            //     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-            //     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            //     client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+            if(type == "rental.booked" && rental_id != null){
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
 
-            //     var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
+                HttpResponseMessage messagesIdsResponse = await client.GetAsync($"owner/v1/rentals/{rental_id}/messages.json");
 
-            //     var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+                if(messagesIdsResponse.IsSuccessStatusCode){
+                    
+                    string messagesIdsResponseBody = await messagesIdsResponse.Content.ReadAsStringAsync();
+                    List<Message> messages = JsonConvert.DeserializeObject<List<Message>>(messagesIdsResponseBody);
+                    
+                    if(messages.Count > 0){ 
+                        _logger.LogInformation("Booking message has already been sent");
+                        return new OkObjectResult("Booking message has already been sent");
+                    }
+                    
+                    var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen. Bare å sende meg en melding her dersom du har noen spørsmål. God tur!\"}";
 
-            //     HttpResponseMessage response = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", content);
+                    var confirmationMessageContent = new StringContent(jsonData, Encoding.UTF8, "application/json");
 
-            //      string responseBody = await response.Content.ReadAsStringAsync();
+                    HttpResponseMessage sendMessageResponse = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", confirmationMessageContent);
 
-            //     _logger.LogInformation("Response: " + responseBody);
+                    if(sendMessageResponse.IsSuccessStatusCode){
+                        _logger.LogInformation("Successfully sent message");
+                        return new OkObjectResult("Successfully sent message");
+                    }
+                    else{
+                        var statusCode = sendMessageResponse.StatusCode;
+                        _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
+                        return new OkObjectResult($"Message sending failed, with status code: {statusCode}");
+                    }
+                }
+            }
 
-            //     return new OkObjectResult("Response: " + responseBody);
-            // }
-
-            return new OkObjectResult("Request not type rental.booked");
+            return new OkObjectResult("Event is either not rental.booked or/and rental id is null");
         }
 
 
-        // string signature = req.Headers["X-Drivy-Signature"];
-////////////////////////////////////////////////////////////////////////////////
-            // READ: Code that sends a message to the client who rented a car
-            // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-            // client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            // client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
-
-            // var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen! Ikke nøl med å gi tilbakemeldinger eller spørsmål om du har noen. Ønsker deg en fantastisk tur!\"}";
-
-            // var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-            // HttpResponseMessage response = await client.PostAsync("owner/v1/rentals/8305555/messages.json", content);
-
-            //  string responseBody = await response.Content.ReadAsStringAsync();
-
-            // _logger.LogInformation("Response: " + responseBody);
-////////////////////////////////////////////////////////////////////////////////
-        
+        // string signature = req.Headers["X-Drivy-Signature"];        
 
         // _logger.LogInformation("x-Drivy-Signature: " + signature);
         // _logger.LogInformation("requestBody: " + requestBody);
@@ -93,9 +98,6 @@ namespace GetAroundBredvid.Function
         // var payload = JObject.Parse(requestBody);
 
         // _logger.LogInformation($"Payload received: {payload.ToString()}");
-
-
-
 
         // private static bool VerifySignature(string payloadBody, string signature)
         // {
