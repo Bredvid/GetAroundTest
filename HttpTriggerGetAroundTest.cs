@@ -52,9 +52,9 @@ namespace GetAroundBredvid.Function
 
             if(rental_id != null){
                 JToken carId = await GetCarIdAsync(rental_id);
-                if(type == "rental.booked") await BookingMessageAsync(_logger, rental_id, carId.ToString());
-                else if(type == "rental.car_checked_in") await CheckInMessageAsync(_logger, rental_id, carId.ToString());
-                else if(type == "rental.car_checked_out") await CheckoutMessageAsync(_logger, rental_id, carId.ToString());
+                if(type == "rental.booked") return await BookingMessageAsync(_logger, rental_id, carId.ToString());
+                else if(type == "rental.car_checked_in") return await CheckInMessageAsync(_logger, rental_id, carId.ToString());
+                else if(type == "rental.car_checked_out") return await CheckoutMessageAsync(_logger, rental_id, carId.ToString());
             }
 
             return new OkObjectResult("Event is either not rental.booked,  or/and rental id is null");
@@ -76,7 +76,7 @@ namespace GetAroundBredvid.Function
         }
 
         private static async Task<OkObjectResult> BookingMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
-            var data = await SanityMessage(_logger, carId, "bookingMessage"); // _logger needs to be carId
+            var data = await SanityMessage(_logger, carId, "bookingMessage");
             var bookingMessage = data["result"]["bookingMessage"];
 
             HttpResponseMessage messagesIdsResponse = await client.GetAsync($"owner/v1/rentals/{rental_id}/messages.json");
@@ -98,7 +98,7 @@ namespace GetAroundBredvid.Function
         }
 
         private static async Task<OkObjectResult> CheckInMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
-            var data = await SanityMessage(_logger, carId, "checkInMessage"); // rental_id needs to be carId
+            var data = await SanityMessage(_logger, carId, "checkInMessage"); 
             var checkInMessage = data["result"]["checkInMessage"];
             string messageContent = JsonConvert.SerializeObject(new { content = checkInMessage["checkInMessageContent"]?.ToString() });
     
@@ -106,7 +106,7 @@ namespace GetAroundBredvid.Function
         }
 
         private static async Task<OkObjectResult> CheckoutMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
-            var data = await SanityMessage(_logger, carId, "checkoutMessage"); // _logger needs to be carId
+            var data = await SanityMessage(_logger, carId, "checkoutMessage"); 
             var checkoutMessage = data["result"]["checkoutMessage"]["checkoutMessageContent"];
             string messageContent = JsonConvert.SerializeObject(new { content = checkoutMessage?.ToString() });
             
@@ -114,7 +114,7 @@ namespace GetAroundBredvid.Function
         }
 
         private static async Task<JObject> SanityMessage( ILogger<HttpTriggerGetAroundTest> _logger, string carId, string messageType){
-            string query = $"*[_type == 'car' && carId == '{carId}'][0]{{{messageType}->}}"; // FIX QUERY TO USE CAR ID!!!
+            string query = $"*[_type == 'car' && carId == '{carId}'][0]{{{messageType}->}}"; 
             string url = $"https://{projectId}.api.sanity.io/v1/data/query/{dataset}?query={Uri.EscapeDataString(query)}";
 
             httpSanityClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -147,7 +147,8 @@ namespace GetAroundBredvid.Function
                 //     _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
                 //    return new OkObjectResult($"Message sending failed, with status code: {statusCode}"); 
                 // }
-                return new OkObjectResult($"Message sending failed, with status code:");
+                _logger.LogInformation("Message sending failed, with status code: All the way!!");
+                return new OkObjectResult($"Message sending failed, with status code: All the way!!");
         }
 
 
