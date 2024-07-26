@@ -86,10 +86,10 @@ namespace GetAroundBredvid.Function
                 string messagesIdsResponseBody = await messagesIdsResponse.Content.ReadAsStringAsync();
                 List<Message> messages = JsonConvert.DeserializeObject<List<Message>>(messagesIdsResponseBody);
                         
-                // if(messages.Count > 0){ 
-                //     _logger.LogInformation("Booking message has already been sent");
-                //     return new OkObjectResult("Booking message has already been sent");
-                // }
+                if(messages.Count > 0){ 
+                    _logger.LogInformation("Booking message has already been sent");
+                    return new OkObjectResult("Booking message has already been sent");
+                }
                 string messageContent = JsonConvert.SerializeObject(new { content = bookingMessage["bookingMessageContent"]?.ToString() });
                 
                 return await SendGetAroundMessage(_logger, messageContent, rental_id);
@@ -134,21 +134,19 @@ namespace GetAroundBredvid.Function
         private static async Task<OkObjectResult> SendGetAroundMessage( ILogger<HttpTriggerGetAroundTest> _logger, string  messageContent, string rental_id){
                 _logger.LogInformation(messageContent);
 
-                // // Actual sending of message should be commented when testing since we dont have a testing environment!!!!
-                //  var jsonMessage = new StringContent(messageContent, Encoding.UTF8, "application/json");
-                // HttpResponseMessage sendMessageResponse = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", jsonMessage);
+                // Actual sending of message should be commented when testing since we dont have a testing environment!!!!
+                 var jsonMessage = new StringContent(messageContent, Encoding.UTF8, "application/json");
+                HttpResponseMessage sendMessageResponse = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", jsonMessage);
 
-                // if(sendMessageResponse.IsSuccessStatusCode){
-                //     _logger.LogInformation("Successfully sent message");
-                //     return new OkObjectResult("Successfully sent message");
-                // }
-                // else{
-                //     var statusCode = sendMessageResponse.StatusCode;
-                //     _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
-                //    return new OkObjectResult($"Message sending failed, with status code: {statusCode}"); 
-                // }
-                _logger.LogInformation("Message sending failed, with status code: All the way!!");
-                return new OkObjectResult($"Message sending failed, with status code: All the way!!");
+                if(sendMessageResponse.IsSuccessStatusCode){
+                    _logger.LogInformation("Successfully sent message");
+                    return new OkObjectResult("Successfully sent message");
+                }
+                else{
+                    var statusCode = sendMessageResponse.StatusCode;
+                    _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
+                   return new OkObjectResult($"Message sending failed, with status code: {statusCode}"); 
+                }
         }
 
 
