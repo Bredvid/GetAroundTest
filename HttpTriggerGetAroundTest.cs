@@ -23,6 +23,11 @@ namespace GetAroundBredvid.Function
                 BaseAddress = new Uri("https://api-eu.getaround.com/")
             };
 
+        private static readonly HttpClient httpSanityClient = new HttpClient();
+        private static readonly string projectId = "euo3cwv8";
+        private static readonly string dataset = "production";
+        private static readonly string token = "skFOpC9C07IsMGXRcq7hzvhywAHVZEx3mgA5h5UbVqRvEacgbZbXGl2FGxNk5snXKWL26GDTIWi1528JhTSnSOabO1fCeGeE1ysy6YCO1BDgQ5H0cmy454NdJHlZBeXv6f22u9v6CLdMZWyjdwwY1SFmjxYb932ngRZA09QgN21GWqcWF93n";
+
         public HttpTriggerGetAroundTest(ILogger<HttpTriggerGetAroundTest> logger)
         {
             _logger = logger;
@@ -45,42 +50,103 @@ namespace GetAroundBredvid.Function
 
             string rental_id = data?.data?.rental_id;
 
-            if(type == "rental.booked" && rental_id != null){
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
-
-                HttpResponseMessage messagesIdsResponse = await client.GetAsync($"owner/v1/rentals/{rental_id}/messages.json");
-
-                if(messagesIdsResponse.IsSuccessStatusCode){
-                    
-                    string messagesIdsResponseBody = await messagesIdsResponse.Content.ReadAsStringAsync();
-                    List<Message> messages = JsonConvert.DeserializeObject<List<Message>>(messagesIdsResponseBody);
-                    
-                    if(messages.Count > 0){ 
-                        _logger.LogInformation("Booking message has already been sent");
-                        return new OkObjectResult("Booking message has already been sent");
-                    }
-                    
-                    var jsonData = "{\"content\": \"Hei, tusen takk for bestillingen. Bare å sende meg en melding her dersom du har noen spørsmål. God tur!\"}";
-
-                    var confirmationMessageContent = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                    HttpResponseMessage sendMessageResponse = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", confirmationMessageContent);
-
-                    if(sendMessageResponse.IsSuccessStatusCode){
-                        _logger.LogInformation("Successfully sent message");
-                        return new OkObjectResult("Successfully sent message");
-                    }
-                    else{
-                        var statusCode = sendMessageResponse.StatusCode;
-                        _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
-                        return new OkObjectResult($"Message sending failed, with status code: {statusCode}");
-                    }
-                }
+            if(rental_id != null){
+                JToken carId = await GetCarIdAsync(rental_id);
+                if(type == "rental.booked") return await BookingMessageAsync(_logger, rental_id, carId.ToString());
+                else if(type == "rental.car_checked_in") return await CheckInMessageAsync(_logger, rental_id, carId.ToString());
+                else if(type == "rental.car_checked_out") return await CheckoutMessageAsync(_logger, rental_id, carId.ToString());
             }
 
-            return new OkObjectResult("Event is either not rental.booked or/and rental id is null");
+            return new OkObjectResult("Event is either not rental.booked,  or/and rental id is null");
+        }
+
+        private static async Task<JToken> GetCarIdAsync(string rental_id){
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+
+            HttpResponseMessage rentalPropsResponse = await client.GetAsync($"owner/v1/rentals/{rental_id}.json");
+            if(rentalPropsResponse.IsSuccessStatusCode){ 
+                string responseBody = await rentalPropsResponse.Content.ReadAsStringAsync();
+                var data = JsonConvert.DeserializeObject<JObject>(responseBody);
+                var carId = data["car_id"];
+                return carId == null ? null : carId;
+                }
+                return null;
+        }
+
+        private static async Task<OkObjectResult> BookingMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
+            var data = await SanityMessage(_logger, carId, "bookingMessage");
+            var bookingMessage = data["result"]["bookingMessage"];
+
+            HttpResponseMessage messagesIdsResponse = await client.GetAsync($"owner/v1/rentals/{rental_id}/messages.json");
+
+            if(messagesIdsResponse.IsSuccessStatusCode){
+                
+                string messagesIdsResponseBody = await messagesIdsResponse.Content.ReadAsStringAsync();
+                List<Message> messages = JsonConvert.DeserializeObject<List<Message>>(messagesIdsResponseBody);
+                        
+                if(messages.Count > 0){ 
+                    _logger.LogInformation("Booking message has already been sent");
+                    return new OkObjectResult("Booking message has already been sent");
+                }
+                string messageContent = JsonConvert.SerializeObject(new { content = bookingMessage["bookingMessageContent"]?.ToString() });
+                
+                return await SendGetAroundMessage(_logger, messageContent, rental_id);
+            }
+            return new OkObjectResult($"messagesIdsResponse.IsSuccessStatusCode is false");
+        }
+
+        private static async Task<OkObjectResult> CheckInMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
+            var data = await SanityMessage(_logger, carId, "checkInMessage"); 
+            var checkInMessage = data["result"]["checkInMessage"];
+            string messageContent = JsonConvert.SerializeObject(new { content = checkInMessage["checkInMessageContent"]?.ToString() });
+    
+            return await SendGetAroundMessage(_logger, messageContent, rental_id);
+        }
+
+        private static async Task<OkObjectResult> CheckoutMessageAsync( ILogger<HttpTriggerGetAroundTest> _logger, string rental_id, string carId){
+            var data = await SanityMessage(_logger, carId, "checkoutMessage"); 
+            var checkoutMessage = data["result"]["checkoutMessage"]["checkoutMessageContent"];
+            string messageContent = JsonConvert.SerializeObject(new { content = checkoutMessage?.ToString() });
+            
+            return await SendGetAroundMessage(_logger, messageContent, rental_id);
+        }
+
+        private static async Task<JObject> SanityMessage( ILogger<HttpTriggerGetAroundTest> _logger, string carId, string messageType){
+            string query = $"*[_type == 'car' && carId == '{carId}'][0]{{{messageType}->}}"; 
+            string url = $"https://{projectId}.api.sanity.io/v1/data/query/{dataset}?query={Uri.EscapeDataString(query)}";
+
+            httpSanityClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            HttpResponseMessage response = await httpSanityClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError($"Error fetching data from Sanity: {response.ReasonPhrase}");
+            }
+
+
+            string responseBody = await response.Content.ReadAsStringAsync();
+            var data = JsonConvert.DeserializeObject<JObject>(responseBody);
+            return data;
+        }
+
+        private static async Task<OkObjectResult> SendGetAroundMessage( ILogger<HttpTriggerGetAroundTest> _logger, string  messageContent, string rental_id){
+                _logger.LogInformation(messageContent);
+
+                // Actual sending of message should be commented when testing since we dont have a testing environment!!!!
+                 var jsonMessage = new StringContent(messageContent, Encoding.UTF8, "application/json");
+                HttpResponseMessage sendMessageResponse = await client.PostAsync($"owner/v1/rentals/{rental_id}/messages.json", jsonMessage);
+
+                if(sendMessageResponse.IsSuccessStatusCode){
+                    _logger.LogInformation("Successfully sent message");
+                    return new OkObjectResult("Successfully sent message");
+                }
+                else{
+                    var statusCode = sendMessageResponse.StatusCode;
+                    _logger.LogInformation($"Message sending failed, with status code: {statusCode}");
+                   return new OkObjectResult($"Message sending failed, with status code: {statusCode}"); 
+                }
         }
 
 
