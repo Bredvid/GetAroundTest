@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
 using System.Collections.Generic;
+using Microsoft.Extensions.ObjectPool;
 
 namespace GetAroundBredvid.Function
 {
@@ -27,7 +28,7 @@ namespace GetAroundBredvid.Function
         private static readonly string projectId = "euo3cwv8";
         private static readonly string dataset = "production";
         private static readonly string token = "skFOpC9C07IsMGXRcq7hzvhywAHVZEx3mgA5h5UbVqRvEacgbZbXGl2FGxNk5snXKWL26GDTIWi1528JhTSnSOabO1fCeGeE1ysy6YCO1BDgQ5H0cmy454NdJHlZBeXv6f22u9v6CLdMZWyjdwwY1SFmjxYb932ngRZA09QgN21GWqcWF93n";
-
+        private static readonly string editorToken = "skn8xGKOBi2oKlzxvEzcsHQZ8iswfOZq1gfheUIFBj7RWoaYjwnFBxRNf8tbPDnynwTWMTNjgGd0mnu5KDl1Os0daBsMOwv5HtG3Ejr5FhJ9kJgzWcFwTS1uZS1SR89JbgeStWCiVTGQR4ejjSv8xzvsDnWTRJJE2fMPepRNI0SyJ4nlrKUH";
         public HttpTriggerGetAroundTest(ILogger<HttpTriggerGetAroundTest> logger)
         {
             _logger = logger;
@@ -37,27 +38,32 @@ namespace GetAroundBredvid.Function
             public int id { get; set; }
         }
 
+        public class Invoice{
+            public int id { get; set; }
+        }
+
         [Function("HttpTriggerGetAroundTest")]
         public async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Anonymous, "post",  Route = null)] HttpRequest req)
         {
             _logger.LogInformation("Function initialized.");
+            
+            return await InvoiceDataTransferAsync(_logger);
+            // string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            // dynamic data = JsonConvert.DeserializeObject(requestBody);
 
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
+            // string type = data?.type;
 
-            string type = data?.type;
+            // string rental_id = data?.data?.rental_id;
 
-            string rental_id = data?.data?.rental_id;
+            // if(rental_id != null){
+            //     JToken carId = await GetCarIdAsync(rental_id);
+            //     if(type == "rental.booked") return await BookingMessageAsync(_logger, rental_id, carId.ToString());
+            //     else if(type == "rental.car_checked_in") return await CheckInMessageAsync(_logger, rental_id, carId.ToString());
+            //     else if(type == "rental.car_checked_out") return await CheckoutMessageAsync(_logger, rental_id, carId.ToString());
+            // }
 
-            if(rental_id != null){
-                JToken carId = await GetCarIdAsync(rental_id);
-                if(type == "rental.booked") return await BookingMessageAsync(_logger, rental_id, carId.ToString());
-                else if(type == "rental.car_checked_in") return await CheckInMessageAsync(_logger, rental_id, carId.ToString());
-                else if(type == "rental.car_checked_out") return await CheckoutMessageAsync(_logger, rental_id, carId.ToString());
-            }
-
-            return new OkObjectResult("Event is either not rental.booked,  or/and rental id is null");
+            //return new OkObjectResult("Event is either not rental.booked,  or/and rental id is null");
         }
 
         private static async Task<JToken> GetCarIdAsync(string rental_id){
@@ -151,6 +157,134 @@ namespace GetAroundBredvid.Function
                 return new OkObjectResult($"Message sending failed, with status code: All the way!!");
         }
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Invoice migration til sanity for testing purposes
+        private static async Task<OkObjectResult> InvoiceDataTransferAsync( ILogger<HttpTriggerGetAroundTest> _logger){
+            // 1. Get invoice ids for a month from GA
+            List<Invoice> invoiceIdsFormatted = await GetInvoiceIds(_logger); 
+             
+            // 2. Map array with IDs
+            invoiceIdsFormatted.ForEach(async invoice =>
+                {
+                    _logger.LogInformation($"Processing Invoice ID: {invoice.id}");
+                    // 3. Get invoice based on ID
+                    JToken invoiceData = await GetInvoice(invoice.id.ToString()); 
+                    // 4. Generate Sanity invoice data based on invoice from GA
+                    JToken invoiceSanityFormate = GenerateSanityInvoiceSchema(_logger, invoiceData);
+                    // 5. Send invoice to sanity
+                    StringContent  invoiceSanityFormateString = new StringContent(invoiceSanityFormate.ToString(), Encoding.UTF8, "application/json");
+
+                    string url = $"https://{projectId}.api.sanity.io/v1/data/mutate/{dataset}";
+                    httpSanityClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", editorToken);
+
+                    HttpResponseMessage response = await httpSanityClient.PostAsync(url, invoiceSanityFormateString);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string errorResponse = await response.Content.ReadAsStringAsync();
+                        _logger.LogError($"Error sending data to Sanity: {response.ReasonPhrase} - {errorResponse}");
+                    }
+
+                    string responseBody = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation($"Response from Sanity: {responseBody}");
+                });
+            return new OkObjectResult("All done!:)");
+        }
+
+        private static async Task<List<Invoice>> GetInvoiceIds(ILogger<HttpTriggerGetAroundTest> _logger){
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+
+            HttpResponseMessage invoiceIds = await client.GetAsync($"owner/v1/invoices.json?start_date= 2024-01-01T00:00:00Z&end_date= 2024-01-31T23:59:59Z&page=1&per_page=40");
+         
+             if(invoiceIds.IsSuccessStatusCode){ 
+                 string responseBody = await invoiceIds.Content.ReadAsStringAsync();
+                 List<Invoice> invoiceIdsFormatted = JsonConvert.DeserializeObject<List<Invoice>>(responseBody);
+                 return invoiceIdsFormatted ?? null;
+                 }
+                 return null; 
+        }
+
+        private static async Task<JToken> GetInvoice(string invoice_id){
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", BearerToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Add("X-Getaround-Version", "2023-08-08.0");
+
+            HttpResponseMessage invoiceResponse = await client.GetAsync($"owner/v1/invoices/{invoice_id}.json");
+            if(invoiceResponse.IsSuccessStatusCode){ 
+                string responseBody = await invoiceResponse.Content.ReadAsStringAsync();
+                var data = JsonConvert.DeserializeObject<JObject>(responseBody);
+                return data ?? null;
+                }
+                return null;
+        }
+
+         static JObject GenerateSanityInvoiceSchema( ILogger<HttpTriggerGetAroundTest> _logger, JToken invoice){
+            var chargeNameMapping = new Dictionary<string, string>
+            {
+                { "driver_rental_payment", "Betaling for sjåførleie" },
+                { "self_insurance_payment", "Betaling for sjåførleie" },
+                { "additional_self_insurance_payment", "Ekstra egenforsikringsbetaling" },
+                { "mileage_package", "Betaling for kilometerpakke" },
+                { "mileage_package_insurance", "Betaling for kilometerpakke frosikring" },
+                { "extra_distance_payment", "Betaling for ekstra avstandsbetaling" },
+                { "driver_compensation", "Betaling for førerkompensasjon" },
+                { "driver_cancellation_fee", "Avbestillingsgebyr for sjåføren" },
+                { "driver_late_return_fee", "Gebyr for sen retur av sjåføren" },
+                { "driver_gas_refill_fee", "Påfyllingsgebyr for sjåfør" },
+                { "driver_recharging_fee", "Ladegebyr for sjåfør" },
+                { "drivy_cancellation_fee", "Avbestillingsgebyr" },
+                { "claims_owner_fee_cg", "Krav eieravgift cg" },
+                { "repatriation_fee", "Hjemtransportgebyr" },
+                { "driver_infraction_fee", "Førerovertredelsesgebyr" },
+                { "driver_mess_fee", "Rotegebyr" },
+                { "insurance_fee", "Forsikringsavgift" },
+                { "assistance_fee", "Assistanseavgift" },
+                { "drivy_unfulfillment_fee", "Uoppfyllelsesgebyr" },
+                { "drivy_service_fee", "Serviceavgift" },
+                { "drivy_breakdown_management_fee", "Administrasjonsgebyr" },
+                { "driver_gas_compensation", "Kompensasjon for drivstoff" },
+                { "driver_toll_compensation", "Kompensasjon for tollavgift" },
+                { "driver_compensation_for_offsite_payment", "Sjåførkompensasjon for offsite betaling" },
+                { "owner_infraction_compensation", "Eierovertredelseserstatning" },
+                { "drivy_gas_compensation", "Drivgasskompensasjon" },
+                { "exceptional_event_compensation", "Kompensasjon for ekstraordinære hendelser" },
+                { "damage_compensation", "Skadeserstatning" },
+                { "other_compensation", "Annen kompensasjon" },
+                { "guarantee_earning", "Garanti inntjening" },
+            };
+
+            var newToken = new JObject
+            {
+                ["mutations"]=new JArray(
+                      new JObject
+                    {
+							["create"] =  new JObject{
+                            ["_type"] = "invoice",
+                                ["charges"] = new JArray(
+                                    invoice["charges"].Select(c => new JObject
+                                    {
+                                        ["_key"] = Guid.NewGuid().ToString("N"),
+                                        ["_type"] = "charge",
+                                        ["amount"] = c["amount"].ToString(),
+                                        ["chargeName"] = chargeNameMapping[c["type"].ToString()],
+                                        ["type"] = c["type"]
+                                    })
+                                ),
+                                ["currency"] = invoice["currency"],
+                                ["emittedAt"] = DateTime.Parse(invoice["emitted_at"].ToString()).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                                ["entityType"] = invoice["entity_type"],
+                                ["invoiceId"] = invoice["id"].ToString(),
+                                ["pdfUrl"] = invoice["pdf_url"].Type == JTokenType.Null ? "Ingen link oppgitt fra GetAround" : invoice["pdf_url"],
+                                ["productId"] = invoice["product_id"].ToString(),
+                                ["productType"] = invoice["product_type"],
+                                ["totalPrice"] = invoice["total_price"].ToString()}
+                })
+        };
+
+            return newToken;
+        }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         // string signature = req.Headers["X-Drivy-Signature"];        
 
